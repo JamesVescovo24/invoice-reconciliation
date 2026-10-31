@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 from contract import BatchInput, SaveInput, Balance, SaveOutput
 from plugin.logic import read_dataset, pin_reference, save_candidate
-from plugin.storage import REPORT_PATH
 from verifier import verify_input, verify_output, verify_task
 
 @pytest.mark.parametrize('batch', ['mixed', 'refunds', 'empty'])
@@ -35,9 +34,9 @@ def test_reject_tamper_and_missing(tmp_path):
     given = BatchInput('mixed')
     reference = pin_reference(given, tmp_path)
     output = save_candidate(SaveInput('mixed', reference.expected), tmp_path)
-    (tmp_path/REPORT_PATH).write_text('{"made":"up"}')
+    (tmp_path/output.path).write_text('{"made":"up"}')
     assert not verify_task('reconcile-invoices', given, output, reference, str(tmp_path))['valid']
-    (tmp_path/REPORT_PATH).unlink()
+    (tmp_path/output.path).unlink()
     assert not verify_task('reconcile-invoices', given, output, reference, str(tmp_path))['valid']
 
 def test_reject_wrong_reference_and_unknown_batch(tmp_path):
@@ -49,9 +48,11 @@ def test_reject_wrong_reference_and_unknown_batch(tmp_path):
 def test_malformed_json_and_count(tmp_path):
     given = BatchInput('empty')
     output = save_candidate(SaveInput('empty',[]), tmp_path)
-    (tmp_path/REPORT_PATH).write_text('{broken json')
     import hashlib
-    corrupt = SaveOutput('empty', REPORT_PATH, hashlib.sha256(b'{broken json').hexdigest(),0)
+    digest = hashlib.sha256(b'{broken json').hexdigest()
+    path = f'reports/result-{digest}.json'
+    (tmp_path/path).write_bytes(b'{broken json')
+    corrupt = SaveOutput('empty', path, digest,0)
     assert not verify_task('reconcile-invoices', given,corrupt,pin_reference(given,tmp_path),str(tmp_path))['valid']
     output = save_candidate(SaveInput('empty',[]), tmp_path)
     output.count = 10
